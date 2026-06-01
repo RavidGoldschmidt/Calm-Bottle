@@ -8,46 +8,67 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;background:#f8f7f4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
 .app{display:flex;flex-direction:column;align-items:center;padding:1.2rem 1rem 2rem;min-height:100vh}
-.title{font-size:22px;font-weight:600;color:#1a1a1a;margin-bottom:3px}
-.sub{font-size:12px;color:#888;margin-bottom:.8rem}
-.mode-toggle{display:flex;gap:6px;margin-bottom:.9rem}
+.title{font-size:22px;font-weight:600;color:#1a1a1a;margin-bottom:2px}
+.sub{font-size:12px;color:#888;margin-bottom:.7rem}
+.mode-toggle{display:flex;gap:6px;margin-bottom:.8rem}
 .mode-btn{padding:6px 18px;border-radius:20px;border:1px solid #ddd;background:#fff;color:#888;font-size:13px;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .mode-btn.active{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
 canvas{display:block;touch-action:none}
-.canvas-wrap{margin-bottom:1rem}
-.colors-label{font-size:12px;color:#888;margin-bottom:6px;align-self:flex-start;width:100%;max-width:340px}
-.cgrid{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:340px;margin-bottom:1rem}
-.cdot{width:32px;height:32px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:transform .12s,border-color .12s;flex-shrink:0;-webkit-tap-highlight-color:transparent}
+.canvas-wrap{margin-bottom:.8rem}
+.music-bar{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #eee;border-radius:12px;padding:8px 16px;margin-bottom:.8rem;width:100%;max-width:320px}
+.music-icon{font-size:22px;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent;transition:transform .15s}
+.music-icon:active{transform:scale(.9)}
+.music-label{font-size:12px;color:#888;flex:1}
+.music-dots{display:flex;gap:3px;align-items:center}
+.music-dot{width:4px;border-radius:2px;background:#3DBFA0;transition:height .2s}
+.colors-label{font-size:12px;color:#888;margin-bottom:6px;align-self:flex-start;width:100%;max-width:320px}
+.cgrid{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:320px;margin-bottom:.8rem}
+.cdot{width:30px;height:30px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:transform .12s,border-color .12s;flex-shrink:0;-webkit-tap-highlight-color:transparent}
 .cdot:hover{transform:scale(1.18)}
 .cdot.on{border-color:#1a1a1a;transform:scale(1.1)}
 .cdot.dim{opacity:.28;cursor:not-allowed;transform:none}
-.btns{display:flex;gap:10px;margin-bottom:.8rem}
-.btn{padding:10px 22px;border-radius:10px;border:1px solid #ddd;background:#fff;color:#1a1a1a;font-size:14px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.btns{display:flex;gap:10px;margin-bottom:.6rem}
+.btn{padding:10px 20px;border-radius:10px;border:1px solid #ddd;background:#fff;color:#1a1a1a;font-size:14px;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .btn:active{background:#f0f0f0}
 .btn.pk{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
 .btn.pk:active{opacity:.82}
-.hint{font-size:11px;color:#aaa;text-align:center;margin-top:4px}
-.motion-btn{margin-bottom:.6rem;padding:8px 20px;border-radius:10px;border:1px solid #4AB9E8;background:#e8f7fd;color:#185FA5;font-size:13px;cursor:pointer;display:none}
+.hint{font-size:11px;color:#bbb;text-align:center}
+.motion-btn{margin-bottom:.6rem;padding:8px 20px;border-radius:10px;border:1px solid #4AB9E8;background:#e8f7fd;color:#185FA5;font-size:13px;cursor:pointer;display:none;-webkit-tap-highlight-color:transparent}
 </style>
 </head>
 <body>
 <div class="app">
   <div class="title">Calm Bottle</div>
-  <div class="sub">Move · tilt · shake to find your calm</div>
+  <div class="sub">Tilt · shake · breathe</div>
+
   <div class="mode-toggle">
     <button class="mode-btn active" id="btnSand" onclick="setMode('sand')">Sand</button>
     <button class="mode-btn" id="btnWater" onclick="setMode('water')">Water</button>
   </div>
+
   <div class="canvas-wrap">
     <canvas id="c"></canvas>
   </div>
+
+  <div class="music-bar" id="musicBar">
+    <span class="music-icon" id="musicIcon" onclick="toggleMusic()">🎵</span>
+    <span class="music-label" id="musicLabel">Tap to play calm music</span>
+    <div class="music-dots" id="musicDots">
+      <div class="music-dot" id="d0" style="height:4px"></div>
+      <div class="music-dot" id="d1" style="height:4px"></div>
+      <div class="music-dot" id="d2" style="height:4px"></div>
+      <div class="music-dot" id="d3" style="height:4px"></div>
+      <div class="music-dot" id="d4" style="height:4px"></div>
+    </div>
+  </div>
+
   <div class="colors-label" id="colorsLabel">Choose up to 5 colors</div>
   <div class="cgrid" id="cgrid"></div>
   <button class="motion-btn" id="motionBtn" onclick="requestMotion()">Enable motion sensor</button>
   <div class="btns">
     <button class="btn" onclick="clearAll()">Clear</button>
     <button class="btn" onclick="fillBottle()">Fill</button>
-    <button class="btn pk" id="shakeBtn" onclick="triggerShake()">Shake!</button>
+    <button class="btn pk" id="shakeBtn" onclick="onShakeBtn()">Shake!</button>
   </div>
   <div class="hint">Fill · tilt your phone · shake to mix</div>
 </div>
@@ -72,46 +93,167 @@ const GR=4.5, ROW_H=GR*1.9;
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
 let W,H,CX,NECK_TOP,NECK_BOT,NHW,BHW,FLOOR;
-let mode='sand';
-let selected=[];
-let motionReady=false;
-let lastAcc=null;
-
-// Sand state
-let grains=[];
-let physicsOn=false;
-let shaking=false,shakeTimer=0;
-let worldGx=0,worldGy=0.35;
-
-// Water particle state — each droplet is a full physics particle
-let wDrops=[];
-let wGx=0, wGy=0.4;
-let wShaking=false, wShakeTimer=0;
-
-// Gyro smoothed values
+let mode='sand', selected=[];
+let motionReady=false, lastAcc=null;
 let smoothAx=0, smoothAy=0;
 
-function setMode(m){
-  mode=m;
-  document.getElementById('btnSand').className='mode-btn'+(m==='sand'?' active':'');
-  document.getElementById('btnWater').className='mode-btn'+(m==='water'?' active':'');
-  document.getElementById('colorsLabel').textContent=m==='sand'?'Choose up to 5 colors':'Choose up to 3 water colors';
-  selected=[];
-  clearAll();
-  buildGrid();
+// Sand
+let grains=[], physicsOn=false, shaking=false, shakeTimer=0;
+let worldGx=0, worldGy=0.35;
+
+// Water
+let wDrops=[], wGx=0, wGy=0.4, wShaking=false, wShakeTimer=0;
+
+// ── MUSIC ENGINE ──────────────────────────────────────────────
+let AC=null, musicOn=false, musicNodes=[], vizInterval=null;
+
+function getAC(){
+  if(!AC) AC=new(window.AudioContext||window.webkitAudioContext)();
+  return AC;
 }
 
+// Pentatonic scale notes (hz) — always sounds peaceful
+const PENTA=[261.63,293.66,329.63,392.00,440.00,523.25,587.33,659.25,783.99,880.00];
+
+function startMusic(){
+  const ac=getAC();
+  if(ac.state==='suspended') ac.resume();
+  musicNodes=[];
+
+  // Master gain with gentle fade-in
+  const master=ac.createGain();
+  master.gain.setValueAtTime(0,ac.currentTime);
+  master.gain.linearRampToValueAtTime(0.38,ac.currentTime+2.5);
+  master.connect(ac.destination);
+
+  // Reverb via convolver (synthetic impulse)
+  const convolver=ac.createConvolver();
+  const len=ac.sampleRate*3;
+  const ir=ac.createBuffer(2,len,ac.sampleRate);
+  for(let ch=0;ch<2;ch++){
+    const d=ir.getChannelData(ch);
+    for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.5)*0.6;
+  }
+  convolver.buffer=ir;
+  convolver.connect(master);
+
+  const dry=ac.createGain(); dry.gain.value=0.5; dry.connect(master);
+  const wet=ac.createGain(); wet.gain.value=0.5; wet.connect(convolver);
+
+  // Slow evolving pad — 4 detuned sine oscillators per note
+  const padNotes=[PENTA[0],PENTA[2],PENTA[4],PENTA[7]];
+  padNotes.forEach((freq,i)=>{
+    [-4,-1,1,4].forEach(detune=>{
+      const osc=ac.createOscillator();
+      const g=ac.createGain();
+      osc.type='sine';
+      osc.frequency.value=freq;
+      osc.detune.value=detune;
+      // slow LFO on gain for breathing effect
+      const lfo=ac.createOscillator();
+      const lfoG=ac.createGain();
+      lfo.frequency.value=0.07+i*0.013;
+      lfo.type='sine';
+      lfoG.gain.value=0.025;
+      lfo.connect(lfoG); lfoG.connect(g.gain);
+      g.gain.value=0.06;
+      osc.connect(g); g.connect(dry); g.connect(wet);
+      osc.start(); lfo.start();
+      musicNodes.push(osc,lfo);
+    });
+  });
+
+  // Gentle pluck melody — random pentatonic notes with soft timing
+  scheduleMelody(ac,dry,wet);
+
+  // Soft low drone
+  const drone=ac.createOscillator();
+  const droneG=ac.createGain();
+  drone.type='sine';
+  drone.frequency.value=65.41; // C2
+  droneG.gain.value=0.055;
+  drone.connect(droneG); droneG.connect(dry); droneG.connect(wet);
+  drone.start();
+  musicNodes.push(drone);
+
+  musicOn=true;
+  startViz();
+}
+
+let melodyTimeout=null;
+function scheduleMelody(ac,dry,wet){
+  function playNote(){
+    if(!musicOn) return;
+    const freq=PENTA[Math.floor(Math.random()*PENTA.length)];
+    const now=ac.currentTime;
+    const osc=ac.createOscillator();
+    const env=ac.createGain();
+    osc.type='triangle';
+    osc.frequency.value=freq;
+    env.gain.setValueAtTime(0,now);
+    env.gain.linearRampToValueAtTime(0.09,now+0.04);
+    env.gain.exponentialRampToValueAtTime(0.001,now+2.2);
+    osc.connect(env); env.connect(dry); env.connect(wet);
+    osc.start(now); osc.stop(now+2.5);
+    const gap=1400+Math.random()*2200;
+    melodyTimeout=setTimeout(playNote,gap);
+  }
+  melodyTimeout=setTimeout(playNote,600);
+}
+
+function stopMusic(){
+  if(melodyTimeout) clearTimeout(melodyTimeout);
+  const ac=getAC();
+  const now=ac.currentTime;
+  musicNodes.forEach(n=>{
+    try{
+      if(n.gain){n.gain.setValueAtTime(n.gain.value,now);n.gain.linearRampToValueAtTime(0,now+1.2);}
+      setTimeout(()=>{try{n.stop();}catch(e){}},1300);
+    }catch(e){try{n.stop();}catch(e2){}}
+  });
+  musicNodes=[];
+  musicOn=false;
+  stopViz();
+}
+
+function toggleMusic(){
+  // iOS requires AudioContext inside a user gesture — this click IS the gesture
+  if(musicOn) stopMusic();
+  else startMusic();
+  updateMusicUI();
+}
+
+function updateMusicUI(){
+  document.getElementById('musicIcon').textContent=musicOn?'🔊':'🎵';
+  document.getElementById('musicLabel').textContent=musicOn?'Playing — tap to pause':'Tap to play calm music';
+}
+
+// Animated equalizer bars
+function startViz(){
+  const dots=[0,1,2,3,4].map(i=>document.getElementById('d'+i));
+  vizInterval=setInterval(()=>{
+    dots.forEach(d=>{
+      d.style.height=(4+Math.random()*14)+'px';
+    });
+  },180);
+}
+function stopViz(){
+  if(vizInterval) clearInterval(vizInterval);
+  [0,1,2,3,4].forEach(i=>{document.getElementById('d'+i).style.height='4px';});
+}
+
+// ── BOTTLE GEOMETRY ───────────────────────────────────────────
 function resize(){
-  const maxW=Math.min(window.innerWidth-40,320);
+  const maxW=Math.min(window.innerWidth-40,300);
   W=maxW; H=Math.round(maxW*1.75);
   canvas.width=W; canvas.height=H;
   canvas.style.width=W+'px'; canvas.style.height=H+'px';
   CX=W/2;
-  NECK_TOP=Math.round(H*0.03);
-  NECK_BOT=Math.round(H*0.16);
-  NHW=Math.round(W*0.14);
-  BHW=Math.round(W*0.43);
-  FLOOR=H-Math.round(H*0.04);
+  NECK_TOP=Math.round(H*.03);
+  NECK_BOT=Math.round(H*.16);
+  NHW=Math.round(W*.14);
+  BHW=Math.round(W*.43);
+  FLOOR=H-Math.round(H*.04);
   if(grains.length||wDrops.length) fillBottle();
   else drawScene();
 }
@@ -121,38 +263,37 @@ function bProfile(y){
   if(y<NECK_BOT){
     const t=(y-NECK_TOP)/(NECK_BOT-NECK_TOP);
     const ease=t*t*(3-2*t);
-    const hw=NHW+(BHW-NHW)*ease;
-    return{l:CX-hw,r:CX+hw};
+    return{l:CX-(NHW+(BHW-NHW)*ease),r:CX+(NHW+(BHW-NHW)*ease)};
   }
   return{l:CX-BHW,r:CX+BHW};
 }
 
-function fillBottle(){
-  if(!selected.length) return;
-  clearAll();
-  mode==='sand' ? fillSand() : fillWater();
+// ── MODE ──────────────────────────────────────────────────────
+function setMode(m){
+  mode=m;
+  document.getElementById('btnSand').className='mode-btn'+(m==='sand'?' active':'');
+  document.getElementById('btnWater').className='mode-btn'+(m==='water'?' active':'');
+  document.getElementById('colorsLabel').textContent=m==='sand'?'Choose up to 5 colors':'Choose up to 3 water colors';
+  selected=[];clearAll();buildGrid();
 }
+
+// ── FILL ──────────────────────────────────────────────────────
+function fillBottle(){ if(selected.length){clearAll(); mode==='sand'?fillSand():fillWater();} }
 
 function fillSand(){
   physicsOn=false;
-  const allRows=[];
+  const rows=[];
   for(let y=FLOOR-GR;y>NECK_TOP+GR*2;y-=ROW_H){
-    const p=bProfile(y);
-    const usable=p.r-p.l-GR*2.2;
-    const cols=Math.floor(usable/(GR*2));
+    const p=bProfile(y),usable=p.r-p.l-GR*2.2,cols=Math.floor(usable/(GR*2));
     if(cols<1) continue;
-    const startX=p.l+GR+1+(usable-cols*GR*2)/2;
-    const row=[];
-    for(let c=0;c<cols;c++) row.push({x:startX+c*GR*2,y});
-    allRows.push(row);
+    const sx=p.l+GR+1+(usable-cols*GR*2)/2,row=[];
+    for(let c=0;c<cols;c++) row.push({x:sx+c*GR*2,y});
+    rows.push(row);
   }
-  const perColor=Math.ceil(allRows.length/selected.length);
-  allRows.forEach((row,ri)=>{
-    const ci=Math.min(Math.floor(ri/perColor),selected.length-1);
-    const cl=SAND_COLORS.find(x=>x.n===selected[ci]);
-    row.forEach(pos=>{
-      grains.push({x:pos.x+(Math.random()-.5)*.4,y:pos.y+(Math.random()-.5)*.4,vx:0,vy:0,color:cl.h,r:GR,static:true});
-    });
+  const pc=Math.ceil(rows.length/selected.length);
+  rows.forEach((row,ri)=>{
+    const cl=SAND_COLORS.find(x=>x.n===selected[Math.min(Math.floor(ri/pc),selected.length-1)]);
+    row.forEach(pos=>grains.push({x:pos.x+(Math.random()-.5)*.4,y:pos.y+(Math.random()-.5)*.4,vx:0,vy:0,color:cl.h,r:GR,static:true}));
   });
   drawScene();
 }
@@ -160,54 +301,59 @@ function fillSand(){
 function fillWater(){
   wDrops=[];
   const palette=selected.map(n=>WATER_COLORS.find(x=>x.n===n));
-  const numC=palette.length;
-  const bodyTop=NECK_BOT+4;
-  const bodyH=FLOOR-bodyTop-4;
-  const bandH=bodyH/numC;
-  // Place water drops in a grid, same as sand but smaller radius
-  const WR=5.5;
-  const WRH=WR*1.85;
+  const WR=5.5,WRH=WR*1.85,numC=palette.length;
+  const bodyTop=NECK_BOT+4,bodyH=FLOOR-bodyTop-4,bandH=bodyH/numC;
   for(let ci=0;ci<numC;ci++){
-    const bTop=bodyTop+ci*bandH;
-    const bBot=bTop+bandH;
+    const bTop=bodyTop+ci*bandH,bBot=bTop+bandH;
     for(let y=bBot-WR;y>=bTop+WR;y-=WRH){
-      const p=bProfile(y);
-      const usable=p.r-p.l-WR*2.2;
-      const cols=Math.floor(usable/(WR*2));
+      const p=bProfile(y),usable=p.r-p.l-WR*2.2,cols=Math.floor(usable/(WR*2));
       if(cols<1) continue;
-      const startX=p.l+WR+1+(usable-cols*WR*2)/2;
-      for(let c=0;c<cols;c++){
-        wDrops.push({
-          x:startX+c*WR*2+(Math.random()-.5)*.4,
-          y:y+(Math.random()-.5)*.4,
-          vx:0,vy:0,
-          color:palette[ci].h,
-          r:WR,
-          static:true
-        });
-      }
+      const sx=p.l+WR+1+(usable-cols*WR*2)/2;
+      for(let c=0;c<cols;c++)
+        wDrops.push({x:sx+c*WR*2+(Math.random()-.5)*.4,y:y+(Math.random()-.5)*.4,vx:0,vy:0,color:palette[ci].h,r:WR,static:true});
     }
   }
   drawScene();
 }
 
-function clearAll(){
-  grains=[];wDrops=[];
-  physicsOn=false;wShaking=false;shaking=false;
-  drawScene();
-}
+function clearAll(){ grains=[];wDrops=[];physicsOn=false;wShaking=false;shaking=false;drawScene(); }
 
+// ── SHAKE ─────────────────────────────────────────────────────
 function triggerShake(){
-  if(mode==='sand'){
-    if(!grains.length) return;
+  if(mode==='sand'&&grains.length){
     grains.forEach(g=>{g.static=false;g.vx=(Math.random()-.5)*5;g.vy=(Math.random()-.5)*5;});
     physicsOn=true;shaking=true;shakeTimer=100;
-  } else {
-    if(!wDrops.length) return;
+  } else if(mode==='water'&&wDrops.length){
     wDrops.forEach(d=>{d.static=false;d.vx=(Math.random()-.5)*6;d.vy=(Math.random()-.5)*6;});
     wShaking=true;wShakeTimer=100;
   }
   playShakeSound();
+}
+
+function onShakeBtn(){
+  if(!motionReady) requestMotion();
+  triggerShake();
+}
+
+// ── PHYSICS ───────────────────────────────────────────────────
+function resolveCollisions(arr,r){
+  const n=arr.length,md=r*2;
+  for(let i=0;i<n;i++){
+    const a=arr[i];
+    for(let j=i+1;j<n;j++){
+      const b=arr[j];
+      const dx=b.x-a.x,dy=b.y-a.y,d2=dx*dx+dy*dy;
+      if(d2<md*md&&d2>.0001){
+        const d=Math.sqrt(d2),nx=dx/d,ny=dy/d,ov=(md-d)*.5;
+        if(!a.static){a.x-=nx*ov;a.y-=ny*ov;}
+        if(!b.static){b.x+=nx*ov;b.y+=ny*ov;}
+        if(!a.static&&!b.static){
+          const dv=((a.vx-b.vx)*nx+(a.vy-b.vy)*ny)*.42;
+          if(dv>0){a.vx-=dv*nx;a.vy-=dv*ny;b.vx+=dv*nx;b.vy+=dv*ny;}
+        }
+      }
+    }
+  }
 }
 
 function updateSand(){
@@ -217,81 +363,45 @@ function updateSand(){
     const t=shakeTimer/100;
     worldGx=(Math.random()-.5)*24*t;
     worldGy=0.35+(Math.random()-.5)*14*t;
-    if(shakeTimer<=0){shaking=false;worldGx=smoothAx;worldGy=0.35;}
+    if(shakeTimer<=0){shaking=false;worldGx=smoothAx*.6;worldGy=0.35;}
   }
-  const n=grains.length;
-  for(let i=0;i<n;i++){
-    const g=grains[i];
-    if(g.static) continue;
-    g.vx+=worldGx*0.06; g.vy+=worldGy;
-    g.vx*=0.80; g.vy*=0.80;
+  grains.forEach(g=>{
+    if(g.static) return;
+    g.vx+=worldGx*.06; g.vy+=worldGy; g.vx*=.80; g.vy*=.80;
     g.x+=g.vx; g.y+=g.vy;
     if(g.y>FLOOR-GR){g.y=FLOOR-GR;g.vy*=-.10;g.vx*=.85;}
     if(g.y<NECK_TOP+GR){g.y=NECK_TOP+GR;g.vy*=-.10;}
     const p=bProfile(g.y);
     if(g.x<p.l+GR+.5){g.x=p.l+GR+.5;g.vx=Math.abs(g.vx)*.10;}
     if(g.x>p.r-GR-.5){g.x=p.r-GR-.5;g.vx=-Math.abs(g.vx)*.10;}
-  }
-  for(let i=0;i<n;i++){
-    const a=grains[i];
-    for(let j=i+1;j<n;j++){
-      const b=grains[j];
-      const dx=b.x-a.x,dy=b.y-a.y,d2=dx*dx+dy*dy,md=GR*2;
-      if(d2<md*md&&d2>.0001){
-        const d=Math.sqrt(d2),nx=dx/d,ny=dy/d,ov=(md-d)*.5;
-        if(!a.static){a.x-=nx*ov;a.y-=ny*ov;}
-        if(!b.static){b.x+=nx*ov;b.y+=ny*ov;}
-        if(!a.static&&!b.static){
-          const dv=((a.vx-b.vx)*nx+(a.vy-b.vy)*ny)*.40;
-          if(dv>0){a.vx-=dv*nx;a.vy-=dv*ny;b.vx+=dv*nx;b.vy+=dv*ny;}
-        }
-      }
-    }
-  }
+  });
+  resolveCollisions(grains,GR);
 }
 
 function updateWater(){
   if(!wDrops.length) return;
-  let cgx=wGx, cgy=wGy;
+  const WR=5.5;
+  let cgx=wGx,cgy=wGy;
   if(wShaking){
     wShakeTimer--;
     const t=wShakeTimer/100;
-    cgx+=(Math.random()-.5)*26*t;
-    cgy+=(Math.random()-.5)*16*t;
-    if(wShakeTimer<=0){wShaking=false;}
+    cgx+=(Math.random()-.5)*26*t; cgy+=(Math.random()-.5)*16*t;
+    if(wShakeTimer<=0) wShaking=false;
   }
-  const WR=5.5;
-  const n=wDrops.length;
-  for(let i=0;i<n;i++){
-    const d=wDrops[i];
-    if(d.static) continue;
-    d.vx+=cgx*0.07; d.vy+=cgy;
-    d.vx*=0.82; d.vy*=0.82;
+  wDrops.forEach(d=>{
+    if(d.static) return;
+    d.vx+=cgx*.07; d.vy+=cgy; d.vx*=.82; d.vy*=.82;
     d.x+=d.vx; d.y+=d.vy;
     if(d.y>FLOOR-WR){d.y=FLOOR-WR;d.vy*=-.12;d.vx*=.85;}
     if(d.y<NECK_TOP+WR){d.y=NECK_TOP+WR;d.vy*=-.12;}
     const p=bProfile(d.y);
     if(d.x<p.l+WR+.5){d.x=p.l+WR+.5;d.vx=Math.abs(d.vx)*.12;}
     if(d.x>p.r-WR-.5){d.x=p.r-WR-.5;d.vx=-Math.abs(d.vx)*.12;}
-  }
-  for(let i=0;i<n;i++){
-    const a=wDrops[i];
-    for(let j=i+1;j<n;j++){
-      const b=wDrops[j];
-      const dx=b.x-a.x,dy=b.y-a.y,d2=dx*dx+dy*dy,md=WR*2;
-      if(d2<md*md&&d2>.0001){
-        const d=Math.sqrt(d2),nx=dx/d,ny=dy/d,ov=(md-d)*.5;
-        if(!a.static){a.x-=nx*ov;a.y-=ny*ov;}
-        if(!b.static){b.x+=nx*ov;b.y+=ny*ov;}
-        if(!a.static&&!b.static){
-          const dv=((a.vx-b.vx)*nx+(a.vy-b.vy)*ny)*.45;
-          if(dv>0){a.vx-=dv*nx;a.vy-=dv*ny;b.vx+=dv*nx;b.vy+=dv*ny;}
-        }
-      }
-    }
-  }
+  });
+  resolveCollisions(wDrops,WR);
 }
 
+// ── DRAW ──────────────────────────────────────────────────────
 function drawBottlePath(){
   ctx.beginPath();
   ctx.moveTo(CX-NHW,NECK_TOP);
@@ -317,100 +427,73 @@ function drawScene(){
   ctx.clip();
   ctx.fillStyle='rgba(215,235,255,0.07)';
   ctx.fillRect(0,0,W,H);
-
   if(mode==='sand'){
     grains.forEach(g=>{
       ctx.beginPath();ctx.arc(g.x,g.y,g.r,0,Math.PI*2);
       ctx.fillStyle=g.color;ctx.fill();
-      ctx.strokeStyle='rgba(0,0,0,0.09)';ctx.lineWidth=0.3;ctx.stroke();
+      ctx.strokeStyle='rgba(0,0,0,0.09)';ctx.lineWidth=.3;ctx.stroke();
     });
   } else {
-    // Draw water drops with translucency so colors blend visually
     wDrops.forEach(d=>{
-      ctx.beginPath();ctx.arc(d.x,d.y,d.r+1,0,Math.PI*2);
-      ctx.fillStyle=hexA(d.color,0.72);ctx.fill();
-      ctx.strokeStyle=hexA(d.color,0.95);ctx.lineWidth=0.5;ctx.stroke();
+      ctx.beginPath();ctx.arc(d.x,d.y,d.r*1.55,0,Math.PI*2);
+      ctx.fillStyle=hexA(d.color,.13);ctx.fill();
     });
-    // Soft glow overlap pass for fluid feel
     wDrops.forEach(d=>{
-      ctx.beginPath();ctx.arc(d.x,d.y,d.r*1.6,0,Math.PI*2);
-      ctx.fillStyle=hexA(d.color,0.12);ctx.fill();
+      ctx.beginPath();ctx.arc(d.x,d.y,d.r,0,Math.PI*2);
+      ctx.fillStyle=hexA(d.color,.75);ctx.fill();
+      ctx.strokeStyle=hexA(d.color,.9);ctx.lineWidth=.4;ctx.stroke();
     });
   }
   ctx.restore();
-
   drawBottlePath();
-  ctx.strokeStyle='rgba(145,195,240,0.85)';
-  ctx.lineWidth=2.5;ctx.stroke();
-
-  ctx.strokeStyle='rgba(255,255,255,0.38)';
-  ctx.lineWidth=4;ctx.lineCap='round';
+  ctx.strokeStyle='rgba(145,195,240,0.85)';ctx.lineWidth=2.5;ctx.stroke();
+  ctx.strokeStyle='rgba(255,255,255,0.38)';ctx.lineWidth=4;ctx.lineCap='round';
   ctx.beginPath();
   ctx.moveTo(CX-BHW+18,NECK_BOT+20);
   ctx.quadraticCurveTo(CX-BHW+12,NECK_BOT+90,CX-BHW+16,FLOOR-50);
   ctx.stroke();
-
-  ctx.fillStyle='#a09080';
-  ctx.strokeStyle='rgba(115,105,88,0.9)';
-  ctx.lineWidth=1;
-  ctx.beginPath();
-  ctx.roundRect(CX-NHW+2,0,NHW*2-4,14,3);
-  ctx.fill();ctx.stroke();
+  ctx.fillStyle='#a09080';ctx.strokeStyle='rgba(115,105,88,0.9)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.roundRect(CX-NHW+2,0,NHW*2-4,14,3);ctx.fill();ctx.stroke();
 }
 
-function loop(){
-  updateSand();
-  updateWater();
-  drawScene();
-  requestAnimationFrame(loop);
-}
+function loop(){ updateSand();updateWater();drawScene();requestAnimationFrame(loop); }
 
-// Touch / click poke
-canvas.addEventListener('touchstart',e=>{
-  e.preventDefault();
-  handlePoke(e.touches[0].clientX,e.touches[0].clientY);
-},{passive:false});
+// ── INPUT ─────────────────────────────────────────────────────
+canvas.addEventListener('touchstart',e=>{e.preventDefault();handlePoke(e.touches[0].clientX,e.touches[0].clientY);},{passive:false});
 canvas.addEventListener('click',e=>handlePoke(e.clientX,e.clientY));
 
 function handlePoke(cx,cy){
   const rect=canvas.getBoundingClientRect();
-  const mx=(cx-rect.left)*(W/rect.width);
-  const my=(cy-rect.top)*(H/rect.height);
+  const mx=(cx-rect.left)*(W/rect.width),my=(cy-rect.top)*(H/rect.height);
   if(mode==='sand'){
     if(!physicsOn){grains.forEach(g=>{g.static=false;});physicsOn=true;}
     grains.forEach(g=>{
       const dx=g.x-mx,dy=g.y-my;
-      if(dx*dx+dy*dy<70*70){const ang=Math.atan2(dy,dx),f=6+Math.random()*5;g.vx+=Math.cos(ang)*f;g.vy+=Math.sin(ang)*f;}
+      if(dx*dx+dy*dy<70*70){const a=Math.atan2(dy,dx),f=6+Math.random()*5;g.vx+=Math.cos(a)*f;g.vy+=Math.sin(a)*f;}
     });
   } else {
     wDrops.forEach(d=>{d.static=false;});
     wDrops.forEach(d=>{
       const dx=d.x-mx,dy=d.y-my;
-      if(dx*dx+dy*dy<80*80){const ang=Math.atan2(dy,dx),f=5+Math.random()*5;d.vx+=Math.cos(ang)*f;d.vy+=Math.sin(ang)*f;}
+      if(dx*dx+dy*dy<80*80){const a=Math.atan2(dy,dx),f=5+Math.random()*5;d.vx+=Math.cos(a)*f;d.vy+=Math.sin(a)*f;}
     });
   }
 }
 
-// Motion / gyro
+// ── MOTION ────────────────────────────────────────────────────
 function setupMotionEvents(){
   window.addEventListener('devicemotion',e=>{
     const a=e.accelerationIncludingGravity;
     if(!a) return;
-    // Smooth the acceleration
     smoothAx=smoothAx*.75+(a.x||0)*.25;
     smoothAy=smoothAy*.75+(a.y||0)*.25;
-    // Apply tilt as gravity direction
-    const tiltX=smoothAx*0.6;
-    const tiltY=Math.max(0.1,-smoothAy*0.5+0.35);
-    worldGx=tiltX; worldGy=tiltY;
-    wGx=tiltX; wGy=tiltY;
-    // Wake up static particles on tilt
+    const tx=smoothAx*.6, ty=Math.max(.1,-smoothAy*.5+.35);
+    worldGx=tx; worldGy=ty; wGx=tx; wGy=ty;
     const moving=Math.abs(smoothAx)>1.5||Math.abs(smoothAy+9.8)>1.5;
     if(moving){
       if(mode==='sand'&&grains.length){grains.forEach(g=>{g.static=false;});physicsOn=true;}
       if(mode==='water'&&wDrops.length) wDrops.forEach(d=>{d.static=false;});
     }
-    // Shake detection
     if(lastAcc){
       const d=Math.abs(a.x-lastAcc.x)+Math.abs(a.y-lastAcc.y)+Math.abs(a.z-lastAcc.z);
       if(d>22) triggerShake();
@@ -423,57 +506,43 @@ function setupMotionEvents(){
 
 async function requestMotion(){
   if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){
-    try{
-      const perm=await DeviceMotionEvent.requestPermission();
-      if(perm==='granted') setupMotionEvents();
-    }catch(e){}
-  } else {
-    setupMotionEvents();
-  }
+    try{ const p=await DeviceMotionEvent.requestPermission(); if(p==='granted') setupMotionEvents(); }catch(e){}
+  } else { setupMotionEvents(); }
 }
 
-// On iOS we need a user gesture — show button
 window.addEventListener('load',()=>{
   if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){
     document.getElementById('motionBtn').style.display='block';
-  } else {
-    // Android / desktop — just start
-    setupMotionEvents();
-  }
+  } else { setupMotionEvents(); }
 });
 
-document.getElementById('shakeBtn').addEventListener('click',()=>{
-  if(!motionReady) requestMotion();
-  triggerShake();
-});
-
-// Sound
-let audioCtx=null;
-function getACtx(){if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();return audioCtx;}
+// ── SHAKE SOUND ───────────────────────────────────────────────
 function playShakeSound(){
   try{
-    const c=getACtx();
-    const buf=c.createBuffer(1,c.sampleRate*.35,c.sampleRate);
+    const ac=getAC();
+    if(ac.state==='suspended') ac.resume();
+    const buf=ac.createBuffer(1,ac.sampleRate*.3,ac.sampleRate);
     const d=buf.getChannelData(0);
-    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*.07*Math.exp(-i/(c.sampleRate*.12));
-    const src=c.createBufferSource();src.buffer=buf;
-    const g=c.createGain();g.gain.value=.5;
-    src.connect(g);g.connect(c.destination);src.start();
+    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*.06*Math.exp(-i/(ac.sampleRate*.1));
+    const src=ac.createBufferSource(),g=ac.createGain();
+    g.gain.value=.4; src.buffer=buf;
+    src.connect(g);g.connect(ac.destination);src.start();
   }catch(e){}
 }
 
+// ── GRID ──────────────────────────────────────────────────────
 function buildGrid(){
   const g=document.getElementById('cgrid');
   g.innerHTML='';
-  const palette=mode==='sand'?SAND_COLORS:WATER_COLORS;
-  const maxSel=mode==='sand'?5:3;
-  palette.forEach(c=>{
+  const pal=mode==='sand'?SAND_COLORS:WATER_COLORS;
+  const mx=mode==='sand'?5:3;
+  pal.forEach(c=>{
     const d=document.createElement('div');
-    d.className='cdot'+(selected.includes(c.n)?' on':(selected.length>=maxSel&&!selected.includes(c.n)?' dim':''));
-    d.style.background=c.h;d.title=c.n;
+    d.className='cdot'+(selected.includes(c.n)?' on':(selected.length>=mx&&!selected.includes(c.n)?' dim':''));
+    d.style.background=c.h; d.title=c.n;
     d.onclick=()=>{
       if(selected.includes(c.n)) selected=selected.filter(x=>x!==c.n);
-      else if(selected.length<maxSel) selected.push(c.n);
+      else if(selected.length<mx) selected.push(c.n);
       buildGrid();
     };
     g.appendChild(d);
@@ -481,9 +550,7 @@ function buildGrid(){
 }
 
 window.addEventListener('resize',resize);
-buildGrid();
-resize();
-loop();
+buildGrid(); resize(); loop();
 </script>
 </body>
 </html>
