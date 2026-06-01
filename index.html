@@ -9,9 +9,12 @@
 html,body{height:100%;background:#f8f7f4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
 .app{display:flex;flex-direction:column;align-items:center;padding:1.2rem 1rem 2rem;min-height:100vh}
 .title{font-size:22px;font-weight:600;color:#1a1a1a;margin-bottom:3px}
-.sub{font-size:12px;color:#888;margin-bottom:1rem}
-.canvas-wrap{margin-bottom:1rem}
+.sub{font-size:12px;color:#888;margin-bottom:.8rem}
+.mode-toggle{display:flex;gap:6px;margin-bottom:.9rem}
+.mode-btn{padding:6px 18px;border-radius:20px;border:1px solid #ddd;background:#fff;color:#888;font-size:13px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.mode-btn.active{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
 canvas{display:block;touch-action:none}
+.canvas-wrap{margin-bottom:1rem}
 .colors-label{font-size:12px;color:#888;margin-bottom:6px;align-self:flex-start;width:100%;max-width:340px}
 .cgrid{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:340px;margin-bottom:1rem}
 .cdot{width:32px;height:32px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:transform .12s,border-color .12s;flex-shrink:0;-webkit-tap-highlight-color:transparent}
@@ -24,27 +27,33 @@ canvas{display:block;touch-action:none}
 .btn.pk{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
 .btn.pk:active{opacity:.82}
 .hint{font-size:11px;color:#aaa;text-align:center;margin-top:4px}
+.motion-btn{margin-bottom:.6rem;padding:8px 20px;border-radius:10px;border:1px solid #4AB9E8;background:#e8f7fd;color:#185FA5;font-size:13px;cursor:pointer;display:none}
 </style>
 </head>
 <body>
 <div class="app">
   <div class="title">Calm Bottle</div>
-  <div class="sub">Real particle physics · shake to mix</div>
+  <div class="sub">Move · tilt · shake to find your calm</div>
+  <div class="mode-toggle">
+    <button class="mode-btn active" id="btnSand" onclick="setMode('sand')">Sand</button>
+    <button class="mode-btn" id="btnWater" onclick="setMode('water')">Water</button>
+  </div>
   <div class="canvas-wrap">
     <canvas id="c"></canvas>
   </div>
-  <div class="colors-label">Choose up to 5 colors</div>
+  <div class="colors-label" id="colorsLabel">Choose up to 5 colors</div>
   <div class="cgrid" id="cgrid"></div>
+  <button class="motion-btn" id="motionBtn" onclick="requestMotion()">Enable motion sensor</button>
   <div class="btns">
     <button class="btn" onclick="clearAll()">Clear</button>
     <button class="btn" onclick="fillBottle()">Fill</button>
-    <button class="btn pk" onclick="triggerShake()">Shake!</button>
+    <button class="btn pk" id="shakeBtn" onclick="triggerShake()">Shake!</button>
   </div>
-  <div class="hint">Fill to see layers · Shake to mix · Tap to poke</div>
+  <div class="hint">Fill · tilt your phone · shake to mix</div>
 </div>
 
 <script>
-const COLORS=[
+const SAND_COLORS=[
   {n:'rose',h:'#F4607A'},{n:'coral',h:'#F47B50'},{n:'amber',h:'#F5B942'},
   {n:'gold',h:'#E8D44D'},{n:'lime',h:'#8DC63F'},{n:'mint',h:'#3DBFA0'},
   {n:'sky',h:'#4AB9E8'},{n:'blue',h:'#5B8EE6'},{n:'violet',h:'#9B6FE8'},
@@ -52,13 +61,45 @@ const COLORS=[
   {n:'forest',h:'#3A8C5C'},{n:'navy',h:'#3A5FA0'},{n:'ivory',h:'#F2E8C8'},
   {n:'gray',h:'#9AA0A8'},{n:'wine',h:'#8C2E5A'},{n:'obsidian',h:'#4A4A5A'},
 ];
+const WATER_COLORS=[
+  {n:'ocean',h:'#3A9BD5'},{n:'aqua',h:'#2EC4B6'},{n:'sky',h:'#87CEEB'},
+  {n:'lavender',h:'#967BB6'},{n:'rose',h:'#F4607A'},{n:'mint',h:'#3DBFA0'},
+  {n:'amber',h:'#F5B942'},{n:'coral',h:'#F47B50'},{n:'violet',h:'#9B6FE8'},
+  {n:'forest',h:'#3A8C5C'},{n:'wine',h:'#8C2E5A'},{n:'indigo',h:'#5C4FA6'},
+];
 
-const GR=4.5;
-const ROW_H=GR*1.9;
+const GR=4.5, ROW_H=GR*1.9;
 const canvas=document.getElementById('c');
 const ctx=canvas.getContext('2d');
-
 let W,H,CX,NECK_TOP,NECK_BOT,NHW,BHW,FLOOR;
+let mode='sand';
+let selected=[];
+let motionReady=false;
+let lastAcc=null;
+
+// Sand state
+let grains=[];
+let physicsOn=false;
+let shaking=false,shakeTimer=0;
+let worldGx=0,worldGy=0.35;
+
+// Water particle state — each droplet is a full physics particle
+let wDrops=[];
+let wGx=0, wGy=0.4;
+let wShaking=false, wShakeTimer=0;
+
+// Gyro smoothed values
+let smoothAx=0, smoothAy=0;
+
+function setMode(m){
+  mode=m;
+  document.getElementById('btnSand').className='mode-btn'+(m==='sand'?' active':'');
+  document.getElementById('btnWater').className='mode-btn'+(m==='water'?' active':'');
+  document.getElementById('colorsLabel').textContent=m==='sand'?'Choose up to 5 colors':'Choose up to 3 water colors';
+  selected=[];
+  clearAll();
+  buildGrid();
+}
 
 function resize(){
   const maxW=Math.min(window.innerWidth-40,320);
@@ -71,7 +112,8 @@ function resize(){
   NHW=Math.round(W*0.14);
   BHW=Math.round(W*0.43);
   FLOOR=H-Math.round(H*0.04);
-  if(grains.length) fillBottle();
+  if(grains.length||wDrops.length) fillBottle();
+  else drawScene();
 }
 
 function bProfile(y){
@@ -85,19 +127,14 @@ function bProfile(y){
   return{l:CX-BHW,r:CX+BHW};
 }
 
-let grains=[];
-let selected=[];
-let physicsOn=false;
-let shaking=false,shakeTimer=0;
-let gx=0,gy=0;
-let lastAcc=null;
-let motionPermission=false;
-
 function fillBottle(){
   if(!selected.length) return;
-  grains=[];
-  physicsOn=false;
+  clearAll();
+  mode==='sand' ? fillSand() : fillWater();
+}
 
+function fillSand(){
+  physicsOn=false;
   const allRows=[];
   for(let y=FLOOR-GR;y>NECK_TOP+GR*2;y-=ROW_H){
     const p=bProfile(y);
@@ -109,76 +146,145 @@ function fillBottle(){
     for(let c=0;c<cols;c++) row.push({x:startX+c*GR*2,y});
     allRows.push(row);
   }
-
-  const totalRows=allRows.length;
-  const perColor=Math.ceil(totalRows/selected.length);
+  const perColor=Math.ceil(allRows.length/selected.length);
   allRows.forEach((row,ri)=>{
     const ci=Math.min(Math.floor(ri/perColor),selected.length-1);
-    const cl=COLORS.find(x=>x.n===selected[ci]);
+    const cl=SAND_COLORS.find(x=>x.n===selected[ci]);
     row.forEach(pos=>{
-      grains.push({
-        x:pos.x+(Math.random()-.5)*0.4,
-        y:pos.y+(Math.random()-.5)*0.4,
-        vx:0,vy:0,color:cl.h,r:GR,static:true
-      });
+      grains.push({x:pos.x+(Math.random()-.5)*.4,y:pos.y+(Math.random()-.5)*.4,vx:0,vy:0,color:cl.h,r:GR,static:true});
     });
   });
   drawScene();
 }
 
-function clearAll(){grains=[];physicsOn=false;drawScene();}
+function fillWater(){
+  wDrops=[];
+  const palette=selected.map(n=>WATER_COLORS.find(x=>x.n===n));
+  const numC=palette.length;
+  const bodyTop=NECK_BOT+4;
+  const bodyH=FLOOR-bodyTop-4;
+  const bandH=bodyH/numC;
+  // Place water drops in a grid, same as sand but smaller radius
+  const WR=5.5;
+  const WRH=WR*1.85;
+  for(let ci=0;ci<numC;ci++){
+    const bTop=bodyTop+ci*bandH;
+    const bBot=bTop+bandH;
+    for(let y=bBot-WR;y>=bTop+WR;y-=WRH){
+      const p=bProfile(y);
+      const usable=p.r-p.l-WR*2.2;
+      const cols=Math.floor(usable/(WR*2));
+      if(cols<1) continue;
+      const startX=p.l+WR+1+(usable-cols*WR*2)/2;
+      for(let c=0;c<cols;c++){
+        wDrops.push({
+          x:startX+c*WR*2+(Math.random()-.5)*.4,
+          y:y+(Math.random()-.5)*.4,
+          vx:0,vy:0,
+          color:palette[ci].h,
+          r:WR,
+          static:true
+        });
+      }
+    }
+  }
+  drawScene();
+}
+
+function clearAll(){
+  grains=[];wDrops=[];
+  physicsOn=false;wShaking=false;shaking=false;
+  drawScene();
+}
 
 function triggerShake(){
-  if(!grains.length) return;
-  grains.forEach(g=>{g.static=false;g.vx=(Math.random()-.5)*4;g.vy=(Math.random()-.5)*4;});
-  physicsOn=true;
-  shaking=true;
-  shakeTimer=90;
+  if(mode==='sand'){
+    if(!grains.length) return;
+    grains.forEach(g=>{g.static=false;g.vx=(Math.random()-.5)*5;g.vy=(Math.random()-.5)*5;});
+    physicsOn=true;shaking=true;shakeTimer=100;
+  } else {
+    if(!wDrops.length) return;
+    wDrops.forEach(d=>{d.static=false;d.vx=(Math.random()-.5)*6;d.vy=(Math.random()-.5)*6;});
+    wShaking=true;wShakeTimer=100;
+  }
   playShakeSound();
 }
 
-function updatePhysics(){
+function updateSand(){
   if(!physicsOn) return;
-  const baseGy=0.35;
   if(shaking){
     shakeTimer--;
-    const t=shakeTimer/90;
-    gx=(Math.random()-.5)*22*t;
-    gy=baseGy+(Math.random()-.5)*12*t;
-    if(shakeTimer<=0){shaking=false;gx=0;gy=baseGy;}
-  } else {
-    gy=baseGy;
+    const t=shakeTimer/100;
+    worldGx=(Math.random()-.5)*24*t;
+    worldGy=0.35+(Math.random()-.5)*14*t;
+    if(shakeTimer<=0){shaking=false;worldGx=smoothAx;worldGy=0.35;}
   }
-
   const n=grains.length;
   for(let i=0;i<n;i++){
     const g=grains[i];
     if(g.static) continue;
-    g.vx+=gx*0.06; g.vy+=gy;
+    g.vx+=worldGx*0.06; g.vy+=worldGy;
     g.vx*=0.80; g.vy*=0.80;
     g.x+=g.vx; g.y+=g.vy;
-    if(g.y>FLOOR-GR){g.y=FLOOR-GR;g.vy*=-0.10;g.vx*=0.85;}
-    if(g.y<NECK_TOP+GR){g.y=NECK_TOP+GR;g.vy*=-0.10;}
+    if(g.y>FLOOR-GR){g.y=FLOOR-GR;g.vy*=-.10;g.vx*=.85;}
+    if(g.y<NECK_TOP+GR){g.y=NECK_TOP+GR;g.vy*=-.10;}
     const p=bProfile(g.y);
-    const l=p.l+GR+0.5,r=p.r-GR-0.5;
-    if(g.x<l){g.x=l;g.vx=Math.abs(g.vx)*0.10;}
-    if(g.x>r){g.x=r;g.vx=-Math.abs(g.vx)*0.10;}
+    if(g.x<p.l+GR+.5){g.x=p.l+GR+.5;g.vx=Math.abs(g.vx)*.10;}
+    if(g.x>p.r-GR-.5){g.x=p.r-GR-.5;g.vx=-Math.abs(g.vx)*.10;}
   }
   for(let i=0;i<n;i++){
     const a=grains[i];
     for(let j=i+1;j<n;j++){
       const b=grains[j];
-      const dx=b.x-a.x,dy=b.y-a.y;
-      const d2=dx*dx+dy*dy;
-      const md=GR*2;
-      if(d2<md*md&&d2>0.0001){
-        const d=Math.sqrt(d2);
-        const nx=dx/d,ny=dy/d;
-        const ov=(md-d)*0.5;
+      const dx=b.x-a.x,dy=b.y-a.y,d2=dx*dx+dy*dy,md=GR*2;
+      if(d2<md*md&&d2>.0001){
+        const d=Math.sqrt(d2),nx=dx/d,ny=dy/d,ov=(md-d)*.5;
         if(!a.static){a.x-=nx*ov;a.y-=ny*ov;}
         if(!b.static){b.x+=nx*ov;b.y+=ny*ov;}
         if(!a.static&&!b.static){
-          const dv=((a.vx-b.vx)*nx+(a.vy-b.vy)*ny)*0.40;
+          const dv=((a.vx-b.vx)*nx+(a.vy-b.vy)*ny)*.40;
+          if(dv>0){a.vx-=dv*nx;a.vy-=dv*ny;b.vx+=dv*nx;b.vy+=dv*ny;}
+        }
+      }
+    }
+  }
+}
+
+function updateWater(){
+  if(!wDrops.length) return;
+  let cgx=wGx, cgy=wGy;
+  if(wShaking){
+    wShakeTimer--;
+    const t=wShakeTimer/100;
+    cgx+=(Math.random()-.5)*26*t;
+    cgy+=(Math.random()-.5)*16*t;
+    if(wShakeTimer<=0){wShaking=false;}
+  }
+  const WR=5.5;
+  const n=wDrops.length;
+  for(let i=0;i<n;i++){
+    const d=wDrops[i];
+    if(d.static) continue;
+    d.vx+=cgx*0.07; d.vy+=cgy;
+    d.vx*=0.82; d.vy*=0.82;
+    d.x+=d.vx; d.y+=d.vy;
+    if(d.y>FLOOR-WR){d.y=FLOOR-WR;d.vy*=-.12;d.vx*=.85;}
+    if(d.y<NECK_TOP+WR){d.y=NECK_TOP+WR;d.vy*=-.12;}
+    const p=bProfile(d.y);
+    if(d.x<p.l+WR+.5){d.x=p.l+WR+.5;d.vx=Math.abs(d.vx)*.12;}
+    if(d.x>p.r-WR-.5){d.x=p.r-WR-.5;d.vx=-Math.abs(d.vx)*.12;}
+  }
+  for(let i=0;i<n;i++){
+    const a=wDrops[i];
+    for(let j=i+1;j<n;j++){
+      const b=wDrops[j];
+      const dx=b.x-a.x,dy=b.y-a.y,d2=dx*dx+dy*dy,md=WR*2;
+      if(d2<md*md&&d2>.0001){
+        const d=Math.sqrt(d2),nx=dx/d,ny=dy/d,ov=(md-d)*.5;
+        if(!a.static){a.x-=nx*ov;a.y-=ny*ov;}
+        if(!b.static){b.x+=nx*ov;b.y+=ny*ov;}
+        if(!a.static&&!b.static){
+          const dv=((a.vx-b.vx)*nx+(a.vy-b.vy)*ny)*.45;
           if(dv>0){a.vx-=dv*nx;a.vy-=dv*ny;b.vx+=dv*nx;b.vy+=dv*ny;}
         }
       }
@@ -190,13 +296,18 @@ function drawBottlePath(){
   ctx.beginPath();
   ctx.moveTo(CX-NHW,NECK_TOP);
   ctx.lineTo(CX+NHW,NECK_TOP);
-  ctx.quadraticCurveTo(CX+NHW+8,NECK_TOP+(NECK_BOT-NECK_TOP)*0.65,CX+BHW,NECK_BOT+12);
+  ctx.quadraticCurveTo(CX+NHW+8,NECK_TOP+(NECK_BOT-NECK_TOP)*.65,CX+BHW,NECK_BOT+12);
   ctx.lineTo(CX+BHW,FLOOR-22);
   ctx.quadraticCurveTo(CX+BHW,FLOOR,CX,FLOOR);
   ctx.quadraticCurveTo(CX-BHW,FLOOR,CX-BHW,FLOOR-22);
   ctx.lineTo(CX-BHW,NECK_BOT+12);
-  ctx.quadraticCurveTo(CX-NHW-8,NECK_TOP+(NECK_BOT-NECK_TOP)*0.65,CX-NHW,NECK_TOP);
+  ctx.quadraticCurveTo(CX-NHW-8,NECK_TOP+(NECK_BOT-NECK_TOP)*.65,CX-NHW,NECK_TOP);
   ctx.closePath();
+}
+
+function hexA(hex,a){
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return`rgba(${r},${g},${b},${a})`;
 }
 
 function drawScene(){
@@ -204,44 +315,57 @@ function drawScene(){
   ctx.save();
   drawBottlePath();
   ctx.clip();
-  ctx.fillStyle='rgba(215,235,255,0.06)';
+  ctx.fillStyle='rgba(215,235,255,0.07)';
   ctx.fillRect(0,0,W,H);
-  grains.forEach(g=>{
-    ctx.beginPath();
-    ctx.arc(g.x,g.y,g.r,0,Math.PI*2);
-    ctx.fillStyle=g.color;
-    ctx.fill();
-    ctx.strokeStyle='rgba(0,0,0,0.09)';
-    ctx.lineWidth=0.3;
-    ctx.stroke();
-  });
+
+  if(mode==='sand'){
+    grains.forEach(g=>{
+      ctx.beginPath();ctx.arc(g.x,g.y,g.r,0,Math.PI*2);
+      ctx.fillStyle=g.color;ctx.fill();
+      ctx.strokeStyle='rgba(0,0,0,0.09)';ctx.lineWidth=0.3;ctx.stroke();
+    });
+  } else {
+    // Draw water drops with translucency so colors blend visually
+    wDrops.forEach(d=>{
+      ctx.beginPath();ctx.arc(d.x,d.y,d.r+1,0,Math.PI*2);
+      ctx.fillStyle=hexA(d.color,0.72);ctx.fill();
+      ctx.strokeStyle=hexA(d.color,0.95);ctx.lineWidth=0.5;ctx.stroke();
+    });
+    // Soft glow overlap pass for fluid feel
+    wDrops.forEach(d=>{
+      ctx.beginPath();ctx.arc(d.x,d.y,d.r*1.6,0,Math.PI*2);
+      ctx.fillStyle=hexA(d.color,0.12);ctx.fill();
+    });
+  }
   ctx.restore();
+
   drawBottlePath();
   ctx.strokeStyle='rgba(145,195,240,0.85)';
-  ctx.lineWidth=2.5;
-  ctx.stroke();
+  ctx.lineWidth=2.5;ctx.stroke();
+
   ctx.strokeStyle='rgba(255,255,255,0.38)';
-  ctx.lineWidth=4;
-  ctx.lineCap='round';
+  ctx.lineWidth=4;ctx.lineCap='round';
   ctx.beginPath();
   ctx.moveTo(CX-BHW+18,NECK_BOT+20);
   ctx.quadraticCurveTo(CX-BHW+12,NECK_BOT+90,CX-BHW+16,FLOOR-50);
   ctx.stroke();
+
   ctx.fillStyle='#a09080';
   ctx.strokeStyle='rgba(115,105,88,0.9)';
   ctx.lineWidth=1;
   ctx.beginPath();
-  const capW=NHW*2-4;
-  ctx.roundRect(CX-NHW+2,0,capW,14,3);
+  ctx.roundRect(CX-NHW+2,0,NHW*2-4,14,3);
   ctx.fill();ctx.stroke();
 }
 
 function loop(){
-  updatePhysics();
+  updateSand();
+  updateWater();
   drawScene();
   requestAnimationFrame(loop);
 }
 
+// Touch / click poke
 canvas.addEventListener('touchstart',e=>{
   e.preventDefault();
   handlePoke(e.touches[0].clientX,e.touches[0].clientY);
@@ -249,58 +373,91 @@ canvas.addEventListener('touchstart',e=>{
 canvas.addEventListener('click',e=>handlePoke(e.clientX,e.clientY));
 
 function handlePoke(cx,cy){
-  if(!physicsOn){grains.forEach(g=>{g.static=false;});physicsOn=true;}
   const rect=canvas.getBoundingClientRect();
   const mx=(cx-rect.left)*(W/rect.width);
   const my=(cy-rect.top)*(H/rect.height);
-  grains.forEach(g=>{
-    const dx=g.x-mx,dy=g.y-my;
-    if(dx*dx+dy*dy<70*70){
-      const ang=Math.atan2(dy,dx);
-      const f=6+Math.random()*5;
-      g.vx+=Math.cos(ang)*f;
-      g.vy+=Math.sin(ang)*f;
+  if(mode==='sand'){
+    if(!physicsOn){grains.forEach(g=>{g.static=false;});physicsOn=true;}
+    grains.forEach(g=>{
+      const dx=g.x-mx,dy=g.y-my;
+      if(dx*dx+dy*dy<70*70){const ang=Math.atan2(dy,dx),f=6+Math.random()*5;g.vx+=Math.cos(ang)*f;g.vy+=Math.sin(ang)*f;}
+    });
+  } else {
+    wDrops.forEach(d=>{d.static=false;});
+    wDrops.forEach(d=>{
+      const dx=d.x-mx,dy=d.y-my;
+      if(dx*dx+dy*dy<80*80){const ang=Math.atan2(dy,dx),f=5+Math.random()*5;d.vx+=Math.cos(ang)*f;d.vy+=Math.sin(ang)*f;}
+    });
+  }
+}
+
+// Motion / gyro
+function setupMotionEvents(){
+  window.addEventListener('devicemotion',e=>{
+    const a=e.accelerationIncludingGravity;
+    if(!a) return;
+    // Smooth the acceleration
+    smoothAx=smoothAx*.75+(a.x||0)*.25;
+    smoothAy=smoothAy*.75+(a.y||0)*.25;
+    // Apply tilt as gravity direction
+    const tiltX=smoothAx*0.6;
+    const tiltY=Math.max(0.1,-smoothAy*0.5+0.35);
+    worldGx=tiltX; worldGy=tiltY;
+    wGx=tiltX; wGy=tiltY;
+    // Wake up static particles on tilt
+    const moving=Math.abs(smoothAx)>1.5||Math.abs(smoothAy+9.8)>1.5;
+    if(moving){
+      if(mode==='sand'&&grains.length){grains.forEach(g=>{g.static=false;});physicsOn=true;}
+      if(mode==='water'&&wDrops.length) wDrops.forEach(d=>{d.static=false;});
     }
+    // Shake detection
+    if(lastAcc){
+      const d=Math.abs(a.x-lastAcc.x)+Math.abs(a.y-lastAcc.y)+Math.abs(a.z-lastAcc.z);
+      if(d>22) triggerShake();
+    }
+    lastAcc={x:a.x,y:a.y,z:a.z};
   });
+  motionReady=true;
+  document.getElementById('motionBtn').style.display='none';
 }
 
 async function requestMotion(){
   if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){
     try{
       const perm=await DeviceMotionEvent.requestPermission();
-      if(perm==='granted') setupMotion();
+      if(perm==='granted') setupMotionEvents();
     }catch(e){}
   } else {
-    setupMotion();
+    setupMotionEvents();
   }
 }
 
-function setupMotion(){
-  window.addEventListener('devicemotion',e=>{
-    const a=e.accelerationIncludingGravity;
-    if(!a) return;
-    if(lastAcc){
-      const d=Math.abs(a.x-lastAcc.x)+Math.abs(a.y-lastAcc.y)+Math.abs(a.z-lastAcc.z);
-      if(d>18) triggerShake();
-    }
-    lastAcc={x:a.x,y:a.y,z:a.z};
-  });
-}
-
-document.querySelector('.btn.pk').addEventListener('click',()=>{
-  if(!motionPermission){motionPermission=true;requestMotion();}
+// On iOS we need a user gesture — show button
+window.addEventListener('load',()=>{
+  if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){
+    document.getElementById('motionBtn').style.display='block';
+  } else {
+    // Android / desktop — just start
+    setupMotionEvents();
+  }
 });
 
+document.getElementById('shakeBtn').addEventListener('click',()=>{
+  if(!motionReady) requestMotion();
+  triggerShake();
+});
+
+// Sound
 let audioCtx=null;
 function getACtx(){if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();return audioCtx;}
 function playShakeSound(){
   try{
     const c=getACtx();
-    const buf=c.createBuffer(1,c.sampleRate*0.35,c.sampleRate);
+    const buf=c.createBuffer(1,c.sampleRate*.35,c.sampleRate);
     const d=buf.getChannelData(0);
-    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*0.07*Math.exp(-i/(c.sampleRate*0.12));
+    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*.07*Math.exp(-i/(c.sampleRate*.12));
     const src=c.createBufferSource();src.buffer=buf;
-    const g=c.createGain();g.gain.value=0.5;
+    const g=c.createGain();g.gain.value=.5;
     src.connect(g);g.connect(c.destination);src.start();
   }catch(e){}
 }
@@ -308,20 +465,19 @@ function playShakeSound(){
 function buildGrid(){
   const g=document.getElementById('cgrid');
   g.innerHTML='';
-  COLORS.forEach(c=>{
+  const palette=mode==='sand'?SAND_COLORS:WATER_COLORS;
+  const maxSel=mode==='sand'?5:3;
+  palette.forEach(c=>{
     const d=document.createElement('div');
-    d.className='cdot'+(selected.includes(c.n)?' on':(selected.length>=5&&!selected.includes(c.n)?' dim':''));
-    d.style.background=c.h;
-    d.title=c.n;
-    d.onclick=()=>toggleColor(c.n);
+    d.className='cdot'+(selected.includes(c.n)?' on':(selected.length>=maxSel&&!selected.includes(c.n)?' dim':''));
+    d.style.background=c.h;d.title=c.n;
+    d.onclick=()=>{
+      if(selected.includes(c.n)) selected=selected.filter(x=>x!==c.n);
+      else if(selected.length<maxSel) selected.push(c.n);
+      buildGrid();
+    };
     g.appendChild(d);
   });
-}
-
-function toggleColor(n){
-  if(selected.includes(n)) selected=selected.filter(x=>x!==n);
-  else if(selected.length<5) selected.push(n);
-  buildGrid();
 }
 
 window.addEventListener('resize',resize);
