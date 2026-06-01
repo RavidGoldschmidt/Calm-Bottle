@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Calm Bottle</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#f8f7f4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+.app{display:flex;flex-direction:column;align-items:center;padding:1.2rem 1rem 2rem;min-height:100vh}
+.title{font-size:22px;font-weight:600;color:#1a1a1a;margin-bottom:3px}
+.sub{font-size:12px;color:#888;margin-bottom:1rem}
+.canvas-wrap{margin-bottom:1rem}
+canvas{display:block;touch-action:none}
+.colors-label{font-size:12px;color:#888;margin-bottom:6px;align-self:flex-start;width:100%;max-width:340px}
+.cgrid{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:340px;margin-bottom:1rem}
+.cdot{width:32px;height:32px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:transform .12s,border-color .12s;flex-shrink:0;-webkit-tap-highlight-color:transparent}
+.cdot:hover{transform:scale(1.18)}
+.cdot.on{border-color:#1a1a1a;transform:scale(1.1)}
+.cdot.dim{opacity:.28;cursor:not-allowed;transform:none}
+.btns{display:flex;gap:10px;margin-bottom:.8rem}
+.btn{padding:10px 22px;border-radius:10px;border:1px solid #ddd;background:#fff;color:#1a1a1a;font-size:14px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.btn:active{background:#f0f0f0}
+.btn.pk{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+.btn.pk:active{opacity:.82}
+.hint{font-size:11px;color:#aaa;text-align:center;margin-top:4px}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="title">Calm Bottle</div>
+  <div class="sub">Real particle physics · shake to mix</div>
+  <div class="canvas-wrap">
+    <canvas id="c"></canvas>
+  </div>
+  <div class="colors-label">Choose up to 5 colors</div>
+  <div class="cgrid" id="cgrid"></div>
+  <div class="btns">
+    <button class="btn" onclick="clearAll()">Clear</button>
+    <button class="btn" onclick="fillBottle()">Fill</button>
+    <button class="btn pk" onclick="triggerShake()">Shake!</button>
+  </div>
+  <div class="hint">Fill to see layers · Shake to mix · Tap to poke</div>
+</div>
+
+<script>
+const COLORS=[
+  {n:'rose',h:'#F4607A'},{n:'coral',h:'#F47B50'},{n:'amber',h:'#F5B942'},
+  {n:'gold',h:'#E8D44D'},{n:'lime',h:'#8DC63F'},{n:'mint',h:'#3DBFA0'},
+  {n:'sky',h:'#4AB9E8'},{n:'blue',h:'#5B8EE6'},{n:'violet',h:'#9B6FE8'},
+  {n:'pink',h:'#D96BC8'},{n:'sand',h:'#E8C98A'},{n:'rust',h:'#C45C2E'},
+  {n:'forest',h:'#3A8C5C'},{n:'navy',h:'#3A5FA0'},{n:'ivory',h:'#F2E8C8'},
+  {n:'gray',h:'#9AA0A8'},{n:'wine',h:'#8C2E5A'},{n:'obsidian',h:'#4A4A5A'},
+];
+
+const GR=4.5;
+const ROW_H=GR*1.9;
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+
+let W,H,CX,NECK_TOP,NECK_BOT,NHW,BHW,FLOOR;
+
+function resize(){
+  const maxW=Math.min(window.innerWidth-40,320);
+  W=maxW; H=Math.round(maxW*1.75);
+  canvas.width=W; canvas.height=H;
+  canvas.style.width=W+'px'; canvas.style.height=H+'px';
+  CX=W/2;
+  NECK_TOP=Math.round(H*0.03);
+  NECK_BOT=Math.round(H*0.16);
+  NHW=Math.round(W*0.14);
+  BHW=Math.round(W*0.43);
+  FLOOR=H-Math.round(H*0.04);
+  if(grains.length) fillBottle();
+}
+
+function bProfile(y){
+  if(y<=NECK_TOP) return{l:CX-NHW,r:CX+NHW};
+  if(y<NECK_BOT){
+    const t=(y-NECK_TOP)/(NECK_BOT-NECK_TOP);
+    const ease=t*t*(3-2*t);
+    const hw=NHW+(BHW-NHW)*ease;
+    return{l:CX-hw,r:CX+hw};
+  }
+  return{l:CX-BHW,r:CX+BHW};
+}
+
+let grains=[];
+let selected=[];
+let physicsOn=false;
+let shaking=false,shakeTimer=0;
+let gx=0,gy=0;
+let lastAcc=null;
+let motionPermission=false;
+
+function fillBottle(){
+  if(!selected.length) return;
+  grains=[];
+  physicsOn=false;
+
+  const allRows=[];
+  for(let y=FLOOR-GR;y>NECK_TOP+GR*2;y-=ROW_H){
+    const p=bProfile(y);
+    const usable=p.r-p.l-GR*2.2;
+    const cols=Math.floor(usable/(GR*2));
+    if(cols<1) continue;
+    const startX=p.l+GR+1+(usable-cols*GR*2)/2;
+    const row=[];
+    for(let c=0;c<cols;c++) row.push({x:startX+c*GR*2,y});
+    allRows.push(row);
+  }
+
+  const totalRows=allRows.length;
+  const perColor=Math.ceil(totalRows/selected.length);
+  allRows.forEach((row,ri)=>{
+    const ci=Math.min(Math.floor(ri/perColor),selected.length-1);
+    const cl=COLORS.find(x=>x.n===selected[ci]);
+    row.forEach(pos=>{
+      grains.push({
+        x:pos.x+(Math.random()-.5)*0.4,
+        y:pos.y+(Math.random()-.5)*0.4,
+        vx:0,vy:0,color:cl.h,r:GR,static:true
+      });
+    });
+  });
+  drawScene();
+}
+
+function clearAll(){grains=[];physicsOn=false;drawScene();}
+
+function triggerShake(){
+  if(!grains.length) return;
+  grains.forEach(g=>{g.static=false;g.vx=(Math.random()-.5)*4;g.vy=(Math.random()-.5)*4;});
+  physicsOn=true;
+  shaking=true;
+  shakeTimer=90;
+  playShakeSound();
+}
+
+function updatePhysics(){
+  if(!physicsOn) return;
+  const baseGy=0.35;
+  if(shaking){
+    shakeTimer--;
+    const t=shakeTimer/90;
+    gx=(Math.random()-.5)*22*t;
+    gy=baseGy+(Math.random()-.5)*12*t;
+    if(shakeTimer<=0){shaking=false;gx=0;gy=baseGy;}
+  } else {
+    gy=baseGy;
+  }
+
+  const n=grains.length;
+  for(let i=0;i<n;i++){
+    const g=grains[i];
+    if(g.static) continue;
+    g.vx+=gx*0.06; g.vy+=gy;
+    g.vx*=0.80; g.vy*=0.80;
+    g.x+=g.vx; g.y+=g.vy;
+    if(g.y>FLOOR-GR){g.y=FLOOR-GR;g.vy*=-0.10;g.vx*=0.85;}
+    if(g.y<NECK_TOP+GR){g.y=NECK_TOP+GR;g.vy*=-0.10;}
+    const p=bProfile(g.y);
+    const l=p.l+GR+0.5,r=p.r-GR-0.5;
+    if(g.x<l){g.x=l;g.vx=Math.abs(g.vx)*0.10;}
+    if(g.x>r){g.x=r;g.vx=-Math.abs(g.vx)*0.10;}
+  }
+  for(let i=0;i<n;i++){
+    const a=grains[i];
+    for(let j=i+1;j<n;j++){
+      const b=grains[j];
+      const dx=b.x-a.x,dy=b.y-a.y;
+      const d2=dx*dx+dy*dy;
+      const md=GR*2;
+      if(d2<md*md&&d2>0.0001){
+        const d=Math.sqrt(d2);
+        const nx=dx/d,ny=dy/d;
+        const ov=(md-d)*0.5;
+        if(!a.static){a.x-=nx*ov;a.y-=ny*ov;}
+        if(!b.static){b.x+=nx*ov;b.y+=ny*ov;}
+        if(!a.static&&!b.static){
+          const dv=((a.vx-b.vx)*nx+(a.vy-b.vy)*ny)*0.40;
+          if(dv>0){a.vx-=dv*nx;a.vy-=dv*ny;b.vx+=dv*nx;b.vy+=dv*ny;}
+        }
+      }
+    }
+  }
+}
+
+function drawBottlePath(){
+  ctx.beginPath();
+  ctx.moveTo(CX-NHW,NECK_TOP);
+  ctx.lineTo(CX+NHW,NECK_TOP);
+  ctx.quadraticCurveTo(CX+NHW+8,NECK_TOP+(NECK_BOT-NECK_TOP)*0.65,CX+BHW,NECK_BOT+12);
+  ctx.lineTo(CX+BHW,FLOOR-22);
+  ctx.quadraticCurveTo(CX+BHW,FLOOR,CX,FLOOR);
+  ctx.quadraticCurveTo(CX-BHW,FLOOR,CX-BHW,FLOOR-22);
+  ctx.lineTo(CX-BHW,NECK_BOT+12);
+  ctx.quadraticCurveTo(CX-NHW-8,NECK_TOP+(NECK_BOT-NECK_TOP)*0.65,CX-NHW,NECK_TOP);
+  ctx.closePath();
+}
+
+function drawScene(){
+  ctx.clearRect(0,0,W,H);
+  ctx.save();
+  drawBottlePath();
+  ctx.clip();
+  ctx.fillStyle='rgba(215,235,255,0.06)';
+  ctx.fillRect(0,0,W,H);
+  grains.forEach(g=>{
+    ctx.beginPath();
+    ctx.arc(g.x,g.y,g.r,0,Math.PI*2);
+    ctx.fillStyle=g.color;
+    ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,0.09)';
+    ctx.lineWidth=0.3;
+    ctx.stroke();
+  });
+  ctx.restore();
+  drawBottlePath();
+  ctx.strokeStyle='rgba(145,195,240,0.85)';
+  ctx.lineWidth=2.5;
+  ctx.stroke();
+  ctx.strokeStyle='rgba(255,255,255,0.38)';
+  ctx.lineWidth=4;
+  ctx.lineCap='round';
+  ctx.beginPath();
+  ctx.moveTo(CX-BHW+18,NECK_BOT+20);
+  ctx.quadraticCurveTo(CX-BHW+12,NECK_BOT+90,CX-BHW+16,FLOOR-50);
+  ctx.stroke();
+  ctx.fillStyle='#a09080';
+  ctx.strokeStyle='rgba(115,105,88,0.9)';
+  ctx.lineWidth=1;
+  ctx.beginPath();
+  const capW=NHW*2-4;
+  ctx.roundRect(CX-NHW+2,0,capW,14,3);
+  ctx.fill();ctx.stroke();
+}
+
+function loop(){
+  updatePhysics();
+  drawScene();
+  requestAnimationFrame(loop);
+}
+
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  handlePoke(e.touches[0].clientX,e.touches[0].clientY);
+},{passive:false});
+canvas.addEventListener('click',e=>handlePoke(e.clientX,e.clientY));
+
+function handlePoke(cx,cy){
+  if(!physicsOn){grains.forEach(g=>{g.static=false;});physicsOn=true;}
+  const rect=canvas.getBoundingClientRect();
+  const mx=(cx-rect.left)*(W/rect.width);
+  const my=(cy-rect.top)*(H/rect.height);
+  grains.forEach(g=>{
+    const dx=g.x-mx,dy=g.y-my;
+    if(dx*dx+dy*dy<70*70){
+      const ang=Math.atan2(dy,dx);
+      const f=6+Math.random()*5;
+      g.vx+=Math.cos(ang)*f;
+      g.vy+=Math.sin(ang)*f;
+    }
+  });
+}
+
+async function requestMotion(){
+  if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){
+    try{
+      const perm=await DeviceMotionEvent.requestPermission();
+      if(perm==='granted') setupMotion();
+    }catch(e){}
+  } else {
+    setupMotion();
+  }
+}
+
+function setupMotion(){
+  window.addEventListener('devicemotion',e=>{
+    const a=e.accelerationIncludingGravity;
+    if(!a) return;
+    if(lastAcc){
+      const d=Math.abs(a.x-lastAcc.x)+Math.abs(a.y-lastAcc.y)+Math.abs(a.z-lastAcc.z);
+      if(d>18) triggerShake();
+    }
+    lastAcc={x:a.x,y:a.y,z:a.z};
+  });
+}
+
+document.querySelector('.btn.pk').addEventListener('click',()=>{
+  if(!motionPermission){motionPermission=true;requestMotion();}
+});
+
+let audioCtx=null;
+function getACtx(){if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();return audioCtx;}
+function playShakeSound(){
+  try{
+    const c=getACtx();
+    const buf=c.createBuffer(1,c.sampleRate*0.35,c.sampleRate);
+    const d=buf.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*0.07*Math.exp(-i/(c.sampleRate*0.12));
+    const src=c.createBufferSource();src.buffer=buf;
+    const g=c.createGain();g.gain.value=0.5;
+    src.connect(g);g.connect(c.destination);src.start();
+  }catch(e){}
+}
+
+function buildGrid(){
+  const g=document.getElementById('cgrid');
+  g.innerHTML='';
+  COLORS.forEach(c=>{
+    const d=document.createElement('div');
+    d.className='cdot'+(selected.includes(c.n)?' on':(selected.length>=5&&!selected.includes(c.n)?' dim':''));
+    d.style.background=c.h;
+    d.title=c.n;
+    d.onclick=()=>toggleColor(c.n);
+    g.appendChild(d);
+  });
+}
+
+function toggleColor(n){
+  if(selected.includes(n)) selected=selected.filter(x=>x!==n);
+  else if(selected.length<5) selected.push(n);
+  buildGrid();
+}
+
+window.addEventListener('resize',resize);
+buildGrid();
+resize();
+loop();
+</script>
+</body>
+</html>
